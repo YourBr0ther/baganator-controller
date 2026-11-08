@@ -63,7 +63,6 @@ Enable the Gamepad UI, open your bags and use the controller.
 | Command | Description |
 | --- | --- |
 | `/bgrc` | Print a status report: gamepad API availability, Gamepad UI state, known and registered frames, focused frame |
-| `/bgrc debug` | Toggle verbose chat output |
 
 ## Troubleshooting
 

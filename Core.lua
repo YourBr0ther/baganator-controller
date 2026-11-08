@@ -13,8 +13,6 @@ addonTable.Core = {}
 local Core = addonTable.Core
 local L = addonTable.Locales
 
-Core.DEBUG = false
-
 ----------------------------------------------------------------------------
 -- Output
 ----------------------------------------------------------------------------
@@ -25,12 +23,6 @@ end
 
 function Core.Print(message)
   print(Colorize(L.ADDON_NAME) .. ": " .. tostring(message))
-end
-
-function Core.Debug(...)
-  if Core.DEBUG then
-    print(Colorize("BGRC"), ...)
-  end
 end
 
 ----------------------------------------------------------------------------
@@ -130,13 +122,6 @@ function Core.IsDescendant(region, ancestor)
   return false
 end
 
-function Core.GetFrameName(frame)
-  if type(frame) == "table" and type(frame.GetName) == "function" then
-    return frame:GetName() or tostring(frame)
-  end
-  return tostring(frame)
-end
-
 ----------------------------------------------------------------------------
 -- Internal events
 ----------------------------------------------------------------------------
@@ -172,11 +157,9 @@ local function Initialize()
     return
   end
   if not Core.HasGamepadAPI() then
-    Core.Debug("Gamepad UI API not present on this client build; staying dormant.")
     return
   end
   if type(Baganator) ~= "table" or type(Baganator.API) ~= "table" or type(Baganator.API.Skins) ~= "table" then
-    Core.Debug("Baganator API not available yet.")
     return
   end
   initialized = true

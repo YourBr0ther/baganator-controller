@@ -33,7 +33,6 @@ local function OnFocusManagerFrameShown(manager, frame)
     return
   end
   if IsOrphanedBlizzardFrame(frame) and Core.IsTracked(frame) then
-    Core.Debug("unregistering hidden Blizzard frame", frame:GetName())
     manager:FrameHidden(frame)
   end
 end

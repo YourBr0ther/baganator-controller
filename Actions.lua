@@ -18,8 +18,8 @@ local Kind = Constants.Kind
 local VirtualButton = Constants.VirtualButton
 
 local KEY_TO_VIRTUAL_BUTTON = {
-  [GAMEPAD_FACE_LEFT or "PAD3"] = VirtualButton.Context,
-  [GAMEPAD_FACE_TOP or "PAD4"] = VirtualButton.More,
+  [GAMEPAD_FACE_LEFT] = VirtualButton.Context,
+  [GAMEPAD_FACE_TOP] = VirtualButton.More,
 }
 
 local proxy
@@ -208,7 +208,7 @@ end
 -- Performing actions
 ----------------------------------------------------------------------------
 
-function Actions.DoContextAction(frame)
+local function DoContextAction(frame)
   if not Actions.GetContextLabel(frame) then
     return
   end
@@ -297,7 +297,7 @@ local function PopulateMoreActionsMenu(frame, button, rootDescription)
   end)
 end
 
-function Actions.OpenMoreActions(frame)
+local function OpenMoreActions(frame)
   if not Actions.CanOpenMoreActions(frame) then
     return
   end
@@ -316,9 +316,9 @@ local function OnProxyClick(_, virtualButton)
     return
   end
   if virtualButton == VirtualButton.Context then
-    Actions.DoContextAction(frame)
+    DoContextAction(frame)
   elseif virtualButton == VirtualButton.More then
-    Actions.OpenMoreActions(frame)
+    OpenMoreActions(frame)
   end
 end
 

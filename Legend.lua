@@ -57,17 +57,10 @@ local function BuildFooter(frame)
 end
 
 local function GetOrCreateFooter(frame)
-  local footer = footers[frame]
-  if footer then
-    return footer
+  if not footers[frame] then
+    footers[frame] = BuildFooter(frame)
   end
-  local ok, result = pcall(BuildFooter, frame)
-  if not ok then
-    Core.Debug("Failed to build footer:", result)
-    return nil
-  end
-  footers[frame] = result
-  return result
+  return footers[frame]
 end
 
 local function PositionFooter(frame, footer)
@@ -87,9 +80,6 @@ function Legend.Show(frame)
     return
   end
   local footer = GetOrCreateFooter(frame)
-  if not footer then
-    return
-  end
   PositionFooter(frame, footer)
   footer:ShowAndActivateBindings()
 end
@@ -107,7 +97,7 @@ function Legend.HideAll()
   end
 end
 
-function Legend.Refresh(frame)
+local function Refresh(frame)
   local footer = footers[frame]
   if footer and footer.isShown then
     footer:Refresh()
@@ -121,7 +111,7 @@ function Legend.RequestRefresh(frame)
   refreshQueued[frame] = true
   Core.NextFrame(function()
     refreshQueued[frame] = nil
-    Legend.Refresh(frame)
+    Refresh(frame)
   end)
 end
 

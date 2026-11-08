@@ -63,7 +63,7 @@ end
 -- Finding a sensible button for the cursor to start on
 ----------------------------------------------------------------------------
 
-function Frames.FindFirstItemButton(frame)
+local function FindFirstItemButton(frame)
   local root = frame.Container or frame
   local best, bestLeft, bestTop
 
@@ -94,7 +94,7 @@ function Frames.FindFirstItemButton(frame)
 end
 
 local function ApplyTarget(frame)
-  local target = Frames.FindFirstItemButton(frame)
+  local target = FindFirstItemButton(frame)
   if target then
     SmartNavigation:SetTargetButtonForFrame(frame, target)
   end
@@ -121,7 +121,6 @@ local function Register(info)
   end
   ApplyMarkers(info)
   Core.GetFocusManager():FrameShown(info.frame)
-  Core.Debug("registered", Core.GetFrameName(info.frame))
 end
 
 local function Unregister(info)
@@ -129,7 +128,6 @@ local function Unregister(info)
     return
   end
   Core.GetFocusManager():FrameHidden(info.frame)
-  Core.Debug("unregistered", Core.GetFrameName(info.frame))
 end
 
 local function OnFrameShow(frame)
@@ -170,7 +168,7 @@ local function OnSmartNavSelect(frame)
   addonTable.Legend.RequestRefresh(frame)
 end
 
-function Frames.Setup(frame, kind)
+local function Setup(frame, kind)
   if infoByFrame[frame] then
     return
   end
@@ -190,8 +188,6 @@ function Frames.Setup(frame, kind)
     end
   end
 
-  Core.Debug("setup", Core.GetFrameName(frame), kind)
-
   if frame:IsVisible() then
     OnFrameShow(frame)
   end
@@ -205,7 +201,7 @@ local function OnBaganatorFrameAdded(details)
   if type(frame) ~= "table" or type(frame.HookScript) ~= "function" then
     return
   end
-  Frames.Setup(frame, GetKind(details))
+  Setup(frame, GetKind(details))
 end
 
 ----------------------------------------------------------------------------
@@ -235,7 +231,7 @@ end
 
 -- Baganator re-parents item buttons on every layout pass, which SmartNavigation
 -- does not notice on its own.
-function Frames.RefreshNavigation()
+local function RefreshNavigation()
   if not Core.CanTouchGamepadUI() then
     return
   end
@@ -260,7 +256,7 @@ function Frames.RequestRefresh()
   refreshQueued = true
   Core.NextFrame(function()
     refreshQueued = false
-    Frames.RefreshNavigation()
+    RefreshNavigation()
   end)
 end
 
