@@ -21,20 +21,35 @@ local ADDON_NAME, addonTable = ...
   smartNavPanelInfoAddedCallback, SmartNavigationOnSelect) are invoked through a
   taint barrier. This addon uses exactly that surface and nothing else that
   would push taint into Blizzard's binding stack.
+
+  Module layout (load order is the TOC):
+    Locales         strings, with Blizzard/Baganator translations preferred
+    Constants       names, kinds, internal event names
+    Core            environment checks, shared helpers, internal events, init
+    Legend          button prompt footer under the focused window
+    Actions         A/B/X/Y behaviour and the X/Y override bindings
+    Frames          discovery of Baganator windows and focus registration
+    BlizzardCompat  radial menu and hidden Blizzard frame fixes
+    Commands        /bgrc status command
 ]]
 
 addonTable.Core = {}
 local Core = addonTable.Core
+local L = addonTable.Locales
 
 Core.ADDON_NAME = ADDON_NAME
 Core.DEBUG = false
+
+----------------------------------------------------------------------------
+-- Output
+----------------------------------------------------------------------------
 
 local function Colorize(text)
   return "|cff80c0ff" .. text .. "|r"
 end
 
 function Core.Print(message)
-  print(Colorize(addonTable.Locales.ADDON_NAME) .. ": " .. tostring(message))
+  print(Colorize(L.ADDON_NAME) .. ": " .. tostring(message))
 end
 
 function Core.Debug(...)
@@ -42,6 +57,10 @@ function Core.Debug(...)
     print(Colorize("BGRC"), ...)
   end
 end
+
+----------------------------------------------------------------------------
+-- Environment checks
+----------------------------------------------------------------------------
 
 -- Forever reports interface 16001 and shares the mainline project id.
 function Core.IsForever()
@@ -84,13 +103,16 @@ function Core.CanTouchGamepadUI()
   return Core.IsGamepadUIEnabled() and not Core.IsRestricted()
 end
 
+----------------------------------------------------------------------------
+-- Focus manager accessors
+----------------------------------------------------------------------------
+
 function Core.GetFocusManager()
   return GamepadMode.FrameControlsManager
 end
 
 -- Reading the focus manager's bookkeeping is harmless (reads never taint
--- Blizzard's state), it is only writes that must go through FrameShown and
--- FrameHidden.
+-- Blizzard's state); only writes must go through FrameShown and FrameHidden.
 function Core.IsTracked(frame)
   local manager = Core.GetFocusManager()
   local shownFrames = manager and manager.shownFrames
@@ -113,9 +135,9 @@ function Core.GetFocusedFrame()
   return nil
 end
 
-function Core.IsFocused(frame)
-  return frame ~= nil and Core.GetFocusedFrame() == frame
-end
+----------------------------------------------------------------------------
+-- Small helpers
+----------------------------------------------------------------------------
 
 function Core.NextFrame(callback)
   if RunNextFrame then
@@ -138,14 +160,39 @@ function Core.IsDescendant(region, ancestor)
   return false
 end
 
+function Core.GetFrameName(frame)
+  if type(frame) == "table" and type(frame.GetName) == "function" then
+    return frame:GetName() or tostring(frame)
+  end
+  return tostring(frame)
+end
+
 ----------------------------------------------------------------------------
--- Event handling
+-- Internal events (plain Lua, no Blizzard registries involved)
 ----------------------------------------------------------------------------
 
-local eventFrame = CreateFrame("Frame")
-Core.eventFrame = eventFrame
+local listeners = {}
+
+function Core.RegisterCallback(event, callback)
+  listeners[event] = listeners[event] or {}
+  table.insert(listeners[event], callback)
+end
+
+function Core.TriggerEvent(event, ...)
+  for _, callback in ipairs(listeners[event] or {}) do
+    callback(...)
+  end
+end
+
+----------------------------------------------------------------------------
+-- Initialization and client events
+----------------------------------------------------------------------------
 
 local initialized = false
+
+function Core.IsInitialized()
+  return initialized
+end
 
 local function Initialize()
   if initialized then
@@ -165,16 +212,12 @@ local function Initialize()
   initialized = true
 
   addonTable.Actions.Initialize()
-  addonTable.Frames.Initialize()
   addonTable.BlizzardCompat.Initialize()
+  addonTable.Frames.Initialize()
 
   if Core.IsGamepadUIEnabled() then
     addonTable.Frames.Sync()
   end
-end
-
-function Core.IsInitialized()
-  return initialized
 end
 
 local function OnInterfaceTransition()
@@ -193,7 +236,10 @@ local function OnInterfaceTransition()
   end)
 end
 
-eventFrame:SetScript("OnEvent", function(_, event, ...)
+local eventFrame = CreateFrame("Frame")
+Core.eventFrame = eventFrame
+
+eventFrame:SetScript("OnEvent", function(_, event)
   if event == "PLAYER_LOGIN" then
     Initialize()
     if not initialized then
@@ -211,41 +257,5 @@ end)
 
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+-- Not every build exposes this event; RegisterEvent errors on unknown names.
 pcall(eventFrame.RegisterEvent, eventFrame, "INPUT_DEVICE_INTERFACE_TRANSITION")
-
-----------------------------------------------------------------------------
--- Slash command: /bgrc -- prints a status report useful for bug reports
-----------------------------------------------------------------------------
-
-SLASH_BAGANATOR_CONTROLLER1 = "/bgrc"
-SLASH_BAGANATOR_CONTROLLER2 = "/baganatorcontroller"
-SlashCmdList["BAGANATOR_CONTROLLER"] = function(message)
-  local L = addonTable.Locales
-  message = (message or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  if message == "debug" then
-    Core.DEBUG = not Core.DEBUG
-    Core.Print("debug " .. (Core.DEBUG and "on" or "off"))
-    return
-  end
-
-  local function YesNo(value)
-    return value and "|cff00ff00yes|r" or "|cffff4040no|r"
-  end
-
-  Core.Print(L.STATUS_HEADER)
-  if not Core.IsForever() then
-    print("  " .. L.REQUIRES_FOREVER)
-    return
-  end
-  print("  " .. L.STATUS_GAMEPAD_API .. ": " .. YesNo(Core.HasGamepadAPI()))
-  print("  " .. L.STATUS_GAMEPAD_ENABLED .. ": " .. YesNo(Core.IsGamepadUIEnabled()))
-  print("  " .. L.STATUS_RESTRICTED .. ": " .. YesNo(Core.IsRestricted()))
-  if initialized then
-    local known, tracked = addonTable.Frames.GetCounts()
-    print("  " .. L.STATUS_FRAMES .. ": " .. known)
-    print("  " .. L.STATUS_TRACKED .. ": " .. tracked)
-    local focused = Core.GetFocusedFrame()
-    local focusedName = focused and ((focused.GetName and focused:GetName()) or tostring(focused)) or L.STATUS_NONE
-    print("  " .. L.STATUS_FOCUSED .. ": " .. focusedName)
-  end
-end

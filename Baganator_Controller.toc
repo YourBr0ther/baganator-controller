@@ -1,17 +1,33 @@
 ## Interface: 16001
+## AllowLoadGameType: camelot
 ## Title: Baganator Controller
 ## Notes: Makes Baganator's bag, bank and guild bank windows work with the WoW Forever Gamepad UI: focus, D-pad navigation, button prompts and vendor/bank switching.
 ## Author: YourBr0ther
 ## Version: @project-version@
 ## Dependencies: Baganator
 ## OptionalDeps: Syndicator
-## X-Category: Inventory
+## Group: Baganator
+
+## Category-enUS: Inventory
+## Category-deDE: Inventar
+## Category-esES: Inventario
+## Category-esMX: Inventario
+## Category-frFR: Inventaire
+## Category-itIT: Inventario
+## Category-koKR: 소지품
+## Category-ptBR: Inventário
+## Category-ruRU: Предметы
+## Category-zhCN: 物品栏
+## Category-zhTW: 物品欄
+
 ## X-Website: https://github.com/YourBr0ther/baganator-controller
 ## X-License: MIT
 
 Locales.lua
+Constants.lua
 Core.lua
 Legend.lua
 Actions.lua
 Frames.lua
 BlizzardCompat.lua
+Commands.lua

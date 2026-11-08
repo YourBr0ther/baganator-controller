@@ -5,7 +5,16 @@ on:
   pull_request:
 
 jobs:
-  lua-smoke-tests:
+  luacheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nebularg/actions-luacheck@v1
+        with:
+          args: --no-color -q
+          annotate: warning
+
+  smoke-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -13,14 +13,15 @@ local _, addonTable = ...
 addonTable.Legend = {}
 local Legend = addonTable.Legend
 local Core = addonTable.Core
+local Constants = addonTable.Constants
 local L = addonTable.Locales
 
 local footers = {}
 local refreshQueued = {}
 
-local function CreatePrompt(footer, key, debugName, labelOrFunc, condition)
+local function AddPrompt(footer, key, debugName, labelOrFunc, condition)
   -- Passing a string as the second argument yields an "extensible" prompted
-  -- binding with no bound function attached (see PromptedBinding.lua).
+  -- binding with no bound function attached (see Blizzard's PromptedBinding.lua).
   local prompt = GamepadSharedUtility.CreatePromptedBinding(key, debugName)
   prompt:AddFooterBinding({
     label = labelOrFunc,
@@ -35,19 +36,19 @@ local function BuildFooter(frame)
   local Actions = addonTable.Actions
   local footer = GamepadSharedUtility.CreatePromptedBindingFooter(frame, "BaganatorControllerFooter")
 
-  CreatePrompt(footer, GAMEPAD_FACE_BOTTOM, "BaganatorControllerSelect",
+  AddPrompt(footer, GAMEPAD_FACE_BOTTOM, "BaganatorControllerSelect",
     function() return Actions.GetSelectLabel(frame) end,
     function() return Actions.GetSelectLabel(frame) ~= nil end)
 
-  CreatePrompt(footer, GAMEPAD_FACE_LEFT, "BaganatorControllerContext",
+  AddPrompt(footer, GAMEPAD_FACE_LEFT, "BaganatorControllerContext",
     function() return Actions.GetContextLabel(frame) end,
     function() return Actions.GetContextLabel(frame) ~= nil end)
 
-  CreatePrompt(footer, GAMEPAD_FACE_TOP, "BaganatorControllerMore",
+  AddPrompt(footer, GAMEPAD_FACE_TOP, "BaganatorControllerMore",
     L.Get("MORE_ACTIONS", "CONTEXT_ACTION_LABEL_MORE_ACTIONS"),
     function() return Actions.CanOpenMoreActions(frame) end)
 
-  CreatePrompt(footer, GAMEPAD_FACE_RIGHT, "BaganatorControllerBack",
+  AddPrompt(footer, GAMEPAD_FACE_RIGHT, "BaganatorControllerBack",
     function()
       if CursorHasItem() then
         return L.Get("BACK", "FRAME_ACTION_BACK")
@@ -60,12 +61,26 @@ local function BuildFooter(frame)
   return footer
 end
 
+local function GetOrCreateFooter(frame)
+  local footer = footers[frame]
+  if footer then
+    return footer
+  end
+  local ok, result = pcall(BuildFooter, frame)
+  if not ok then
+    Core.Debug("Failed to build footer:", result)
+    return nil
+  end
+  footers[frame] = result
+  return result
+end
+
 local function PositionFooter(frame, footer)
   -- Baganator windows usually sit at the bottom edge of the screen where the
   -- default "below the frame" placement would be clipped, so flip above.
   local bottom = frame:GetBottom()
   local scale = frame:GetEffectiveScale()
-  if bottom and scale and (bottom * scale) < 56 then
+  if bottom and scale and (bottom * scale) < Constants.LEGEND_FLIP_THRESHOLD then
     footer:SetCustomAnchor(AnchorUtil.CreateAnchor("BOTTOMLEFT", frame, "TOPLEFT", 0, 6))
   else
     footer:SetCustomAnchor(nil)
@@ -77,15 +92,9 @@ function Legend.Show(frame)
   if not Core.IsGamepadUIEnabled() then
     return
   end
-  local footer = footers[frame]
+  local footer = GetOrCreateFooter(frame)
   if not footer then
-    local ok, result = pcall(BuildFooter, frame)
-    if not ok then
-      Core.Debug("Failed to build footer:", result)
-      return
-    end
-    footer = result
-    footers[frame] = footer
+    return
   end
   PositionFooter(frame, footer)
   footer:ShowAndActivateBindings()
@@ -122,3 +131,11 @@ function Legend.RequestRefresh(frame)
     Legend.Refresh(frame)
   end)
 end
+
+Core.RegisterCallback(Constants.Events.FrameFocused, Legend.Show)
+Core.RegisterCallback(Constants.Events.FrameUnfocused, Legend.Hide)
+Core.RegisterCallback(Constants.Events.FrameVisibilityChanged, function(info, shown)
+  if not shown then
+    Legend.Hide(info.frame)
+  end
+end)

@@ -1,0 +1,31 @@
+# Packages the addon with the BigWigs packager when a version tag is pushed
+# (for example `git tag -a v1.0.0 -m "1.0.0" && git push origin v1.0.0`).
+#
+# A GitHub release with the zip is always created. Uploads to CurseForge and
+# Wago happen only when the matching secrets exist and the TOC carries the
+# project ids (## X-Curse-Project-ID / ## X-Wago-ID). The packager detects the
+# 16xxx interface number and tags the build for WoW Forever automatically.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

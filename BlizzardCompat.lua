@@ -18,6 +18,11 @@ local _, addonTable = ...
 addonTable.BlizzardCompat = {}
 local BlizzardCompat = addonTable.BlizzardCompat
 local Core = addonTable.Core
+local Constants = addonTable.Constants
+
+----------------------------------------------------------------------------
+-- Hidden Blizzard frames registered for focus
+----------------------------------------------------------------------------
 
 local function IsOrphanedBlizzardFrame(frame)
   if type(frame) ~= "table" or type(frame.GetName) ~= "function" then
@@ -27,14 +32,8 @@ local function IsOrphanedBlizzardFrame(frame)
   if type(name) ~= "string" then
     return false
   end
-  local isBagLike = name == "BankFrame"
-    or name == "GuildBankFrame"
-    or name == "ContainerFrameCombinedBags"
-    or name:match("^ContainerFrame%d+$") ~= nil
-  if not isBagLike then
-    return false
-  end
-  return not frame:IsVisible()
+  local isBagLike = Constants.ORPHANED_BLIZZARD_FRAMES[name] or name:match(Constants.ORPHANED_BLIZZARD_FRAME_PATTERN) ~= nil
+  return isBagLike and not frame:IsVisible()
 end
 
 local function OnFocusManagerFrameShown(manager, frame)
@@ -47,13 +46,24 @@ local function OnFocusManagerFrameShown(manager, frame)
   end
 end
 
+----------------------------------------------------------------------------
+-- Radial menu "Bags" entry and IsBagOpen() state
+----------------------------------------------------------------------------
+
 local function AnyBackpackVisible()
   for frame, info in pairs(addonTable.Frames.infoByFrame) do
-    if info.kind == "backpack" and frame:IsVisible() then
+    if info.kind == Constants.Kind.Backpack and frame:IsVisible() then
       return true
     end
   end
   return false
+end
+
+-- True when Baganator has moved Blizzard's combined bag frame out of the way.
+local function IsBlizzardBagFrameHiddenByBaganator()
+  return ContainerFrameCombinedBags ~= nil
+    and not ContainerFrameCombinedBags:IsVisible()
+    and ContainerFrameCombinedBags:GetParent() ~= UIParent
 end
 
 local function SyncBaganatorToBlizzardBagState()
@@ -69,7 +79,7 @@ local function SyncBaganatorToBlizzardBagState()
 end
 
 local function OnToggleBackpackCombined()
-  if not Core.IsGamepadUIEnabled() then
+  if not Core.IsGamepadUIEnabled() or not IsBlizzardBagFrameHiddenByBaganator() then
     return
   end
   -- Baganator already handles ToggleBackpack/ToggleAllBags/OpenAllBags/
@@ -84,13 +94,11 @@ local function OnToggleBackpackCombined()
   SyncBaganatorToBlizzardBagState()
 end
 
--- Called from Frames when a Baganator backpack view is shown or hidden.
-function BlizzardCompat.OnBackpackVisibilityChanged(shown)
-  if not Core.IsGamepadUIEnabled() or not ContainerFrameCombinedBags then
+local function OnBaganatorFrameVisibilityChanged(info, shown)
+  if info.kind ~= Constants.Kind.Backpack or not Core.IsGamepadUIEnabled() then
     return
   end
-  if ContainerFrameCombinedBags:IsVisible() or ContainerFrameCombinedBags:GetParent() == UIParent then
-    -- Baganator is not hiding the default bags on this client; leave it alone.
+  if not IsBlizzardBagFrameHiddenByBaganator() then
     return
   end
   if shown then
@@ -102,6 +110,10 @@ function BlizzardCompat.OnBackpackVisibilityChanged(shown)
   end
 end
 
+----------------------------------------------------------------------------
+-- Setup
+----------------------------------------------------------------------------
+
 function BlizzardCompat.Initialize()
   local manager = Core.GetFocusManager()
   if manager and type(manager.FrameShown) == "function" then
@@ -110,4 +122,5 @@ function BlizzardCompat.Initialize()
   if type(ToggleBackpack_Combined) == "function" then
     hooksecurefunc("ToggleBackpack_Combined", OnToggleBackpackCombined)
   end
+  Core.RegisterCallback(Constants.Events.FrameVisibilityChanged, OnBaganatorFrameVisibilityChanged)
 end

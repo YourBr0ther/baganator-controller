@@ -17,6 +17,31 @@ local function ReadToc()
   return files
 end
 
+-- Any read of a global the stubs do not define is a bug in the addon (a typo
+-- or a missing stub), except for optional globals the addon probes on purpose
+-- and the Blizzard/Baganator string constants looked up by Locales.Get.
+local optionalGlobals = {
+  GuildBankFrame = true,
+  BankFrame = true,
+  ContainerFrameCombinedBags = true,
+  ToggleBackpack_Combined = true,
+  RunNextFrame = true,
+  C_RestrictedActions = true,
+  C_PlayerInteractionManager = true,
+  MenuUtil = true,
+  StackSplitFrame = true,
+  Baganator = true,
+  SmartNavigation_IsCurrentButtonClickable = true,
+}
+setmetatable(_G, {
+  __index = function(_, key)
+    if optionalGlobals[key] or (type(key) == "string" and key:match("^[A-Z][A-Z0-9_]*$")) then
+      return nil
+    end
+    error("read of undefined global '" .. tostring(key) .. "'", 2)
+  end,
+})
+
 local addonTable = {}
 for _, file in ipairs(ReadToc()) do
   local chunk = assert(loadfile(root .. "/" .. file))

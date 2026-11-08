@@ -23,28 +23,29 @@ local _, addonTable = ...
 addonTable.Frames = {}
 local Frames = addonTable.Frames
 local Core = addonTable.Core
+local Constants = addonTable.Constants
+
+local Events = Constants.Events
 
 local infoByFrame = {}
 Frames.infoByFrame = infoByFrame
 
-local KIND_BY_TAG = {
-  backpack = "backpack",
-  bank = "bank",
-  guild = "guild",
-  customise = "customise",
-}
-
 local refreshQueued = false
+
+----------------------------------------------------------------------------
+-- Lookup
+----------------------------------------------------------------------------
 
 local function GetKind(details)
   if type(details.tags) == "table" then
     for _, tag in ipairs(details.tags) do
-      if KIND_BY_TAG[tag] then
-        return KIND_BY_TAG[tag]
+      local kind = Constants.KIND_BY_SKIN_TAG[tag]
+      if kind then
+        return kind
       end
     end
   end
-  return "panel"
+  return Constants.Kind.Panel
 end
 
 function Frames.GetInfo(frame)
@@ -79,7 +80,9 @@ function Frames.FindFirstItemButton(frame)
       if region:IsVisible() then
         local left, top = region:GetLeft(), region:GetTop()
         if left and top then
-          if not best or top > bestTop + 0.5 or (math.abs(top - bestTop) <= 0.5 and left < bestLeft) then
+          local higher = not best or top > bestTop + 0.5
+          local sameRowFurtherLeft = best and math.abs(top - bestTop) <= 0.5 and left < bestLeft
+          if higher or sameRowFurtherLeft then
             best, bestLeft, bestTop = region, left, top
           end
         end
@@ -103,39 +106,36 @@ local function ApplyTarget(frame)
 end
 
 ----------------------------------------------------------------------------
--- Registration
+-- Registration with the focus manager
 ----------------------------------------------------------------------------
 
 local function ApplyMarkers(info)
   if info.markersApplied then
     return
   end
-  local frame = info.frame
   -- The search box needs a keyboard; keep the cursor out of it so A never
   -- hands keyboard focus to an edit box the player cannot type into.
-  if frame.SearchWidget then
-    SmartNavigation_MarkFrameIgnored(frame.SearchWidget)
+  if info.frame.SearchWidget then
+    SmartNavigation_MarkFrameIgnored(info.frame.SearchWidget)
   end
   info.markersApplied = true
 end
 
 local function Register(info)
-  local frame = info.frame
-  if Core.IsTracked(frame) then
+  if Core.IsTracked(info.frame) then
     return
   end
   ApplyMarkers(info)
-  Core.GetFocusManager():FrameShown(frame)
-  Core.Debug("registered", frame:GetName())
+  Core.GetFocusManager():FrameShown(info.frame)
+  Core.Debug("registered", Core.GetFrameName(info.frame))
 end
 
 local function Unregister(info)
-  local frame = info.frame
-  if not Core.IsTracked(frame) then
+  if not Core.IsTracked(info.frame) then
     return
   end
-  Core.GetFocusManager():FrameHidden(frame)
-  Core.Debug("unregistered", frame:GetName())
+  Core.GetFocusManager():FrameHidden(info.frame)
+  Core.Debug("unregistered", Core.GetFrameName(info.frame))
 end
 
 local function OnFrameShow(frame)
@@ -143,17 +143,11 @@ local function OnFrameShow(frame)
   if not info then
     return
   end
-  if info.kind == "backpack" then
-    addonTable.BlizzardCompat.OnBackpackVisibilityChanged(true)
+  Core.TriggerEvent(Events.FrameVisibilityChanged, info, true)
+  -- Registration is deferred to Frames.Sync (PLAYER_REGEN_ENABLED) in combat.
+  if Core.CanTouchGamepadUI() then
+    Register(info)
   end
-  if not Core.IsGamepadUIEnabled() then
-    return
-  end
-  if Core.IsRestricted() then
-    -- Picked up by Frames.Sync on PLAYER_REGEN_ENABLED.
-    return
-  end
-  Register(info)
 end
 
 local function OnFrameHide(frame)
@@ -161,30 +155,22 @@ local function OnFrameHide(frame)
   if not info then
     return
   end
-  addonTable.Legend.Hide(frame)
-  if info.kind == "backpack" then
-    addonTable.BlizzardCompat.OnBackpackVisibilityChanged(false)
+  Core.TriggerEvent(Events.FrameVisibilityChanged, info, false)
+  if Core.CanTouchGamepadUI() then
+    Unregister(info)
   end
-  if not Core.CanTouchGamepadUI() then
-    return
-  end
-  Unregister(info)
 end
 
--- Optional callbacks Blizzard's gamepad systems invoke on registered frames.
+----------------------------------------------------------------------------
+-- Callbacks Blizzard's gamepad systems invoke on registered frames
+----------------------------------------------------------------------------
+
 local function OnFocusGamepad(frame)
-  addonTable.Legend.Show(frame)
-  addonTable.Actions.ApplyBindings()
+  Core.TriggerEvent(Events.FrameFocused, frame)
 end
 
 local function OnUnfocusGamepad(frame)
-  addonTable.Legend.Hide(frame)
-end
-
-local function OnPanelInfoAdded(frame)
-  if Core.CanTouchGamepadUI() then
-    ApplyTarget(frame)
-  end
+  Core.TriggerEvent(Events.FrameUnfocused, frame)
 end
 
 local function OnSmartNavSelect(frame)
@@ -206,17 +192,19 @@ function Frames.Setup(frame, kind)
   frame.SmartNavigationCloseHandler = addonTable.Actions.CloseHandler
   frame.SmartNavigationOnSelect = OnSmartNavSelect
   frame.smartNavPanelInfoAddedCallback = function()
-    OnPanelInfoAdded(frame)
+    if Core.CanTouchGamepadUI() then
+      ApplyTarget(frame)
+    end
   end
 
-  Core.Debug("setup", frame:GetName(), kind)
+  Core.Debug("setup", Core.GetFrameName(frame), kind)
 
   if frame:IsVisible() then
     OnFrameShow(frame)
   end
 end
 
-local function Consider(details)
+local function OnBaganatorFrameAdded(details)
   if type(details) ~= "table" or details.regionType ~= "ButtonFrame" then
     return
   end
@@ -260,7 +248,7 @@ function Frames.RefreshNavigation()
   if not Core.CanTouchGamepadUI() then
     return
   end
-  for frame, info in pairs(infoByFrame) do
+  for frame in pairs(infoByFrame) do
     if frame:IsVisible() and Core.IsTracked(frame) then
       SmartNavigation:RefreshButtonGroups(frame)
       if SmartNavigation:GetActiveFrame() == frame then
@@ -285,23 +273,25 @@ function Frames.RequestRefresh()
   end)
 end
 
+----------------------------------------------------------------------------
+-- Setup
+----------------------------------------------------------------------------
+
 function Frames.Initialize()
   local skins = Baganator.API.Skins
   if type(skins.GetAllFrames) == "function" then
     local allFrames = skins.GetAllFrames()
     if type(allFrames) == "table" then
       for _, details in ipairs(allFrames) do
-        Consider(details)
+        OnBaganatorFrameAdded(details)
       end
     end
   end
   if type(skins.RegisterListener) == "function" then
-    skins.RegisterListener(Consider)
+    skins.RegisterListener(OnBaganatorFrameAdded)
   end
 
   if Baganator.CallbackRegistry and type(Baganator.CallbackRegistry.RegisterCallback) == "function" then
-    Baganator.CallbackRegistry:RegisterCallback("ViewComplete", function()
-      Frames.RequestRefresh()
-    end, Frames)
+    Baganator.CallbackRegistry:RegisterCallback("ViewComplete", Frames.RequestRefresh, Frames)
   end
 end

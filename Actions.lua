@@ -12,7 +12,7 @@ local _, addonTable = ...
             while the bank is open, otherwise Open/Read/Equip/Use. Implemented
             as a right click on the item button, exactly what the mouse does.
   Y (PAD4)  "More actions" context menu: split stack, sort, toggle bag slots,
-            all characters, currencies, Baganator settings.
+            bank, all characters, currencies, Baganator settings.
 
   X and Y are bound with SetOverrideBindingClick on UIParent with the same
   priority flag Blizzard's own gamepad binding stack uses, so any later Blizzard
@@ -24,58 +24,45 @@ local _, addonTable = ...
 addonTable.Actions = {}
 local Actions = addonTable.Actions
 local Core = addonTable.Core
+local Constants = addonTable.Constants
 local L = addonTable.Locales
 
-local PROXY_NAME = "BaganatorController_InputButton"
-local ITEM_CONTEXT = "ButtonContext_ContainerFrameItemButton"
+local Kind = Constants.Kind
+local VirtualButton = Constants.VirtualButton
 
-local VIRTUAL_BUTTONS = {
-  [GAMEPAD_FACE_LEFT or "PAD3"] = "Context",
-  [GAMEPAD_FACE_TOP or "PAD4"] = "More",
+local KEY_TO_VIRTUAL_BUTTON = {
+  [GAMEPAD_FACE_LEFT or "PAD3"] = VirtualButton.Context,
+  [GAMEPAD_FACE_TOP or "PAD4"] = VirtualButton.More,
 }
 
 local proxy
-
-function Actions.Initialize()
-  if proxy then
-    return
-  end
-  proxy = CreateFrame("Button", PROXY_NAME, UIParent)
-  proxy:SetSize(1, 1)
-  proxy:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -10, -10)
-  proxy:SetAlpha(0)
-  proxy:EnableMouse(false)
-  proxy:RegisterForClicks("AnyDown")
-  proxy:SetScript("OnClick", function(_, virtualButton)
-    Actions.OnProxyClick(virtualButton)
-  end)
-end
 
 ----------------------------------------------------------------------------
 -- Bindings
 ----------------------------------------------------------------------------
 
 local function OurBindingCommand(virtualButton)
-  return "CLICK " .. PROXY_NAME .. ":" .. virtualButton
+  return "CLICK " .. Constants.PROXY_BUTTON_NAME .. ":" .. virtualButton
 end
 
 function Actions.ApplyBindings()
   if not proxy or Core.IsRestricted() then
     return false
   end
-  for key, virtualButton in pairs(VIRTUAL_BUTTONS) do
-    SetOverrideBindingClick(UIParent, true, key, PROXY_NAME, virtualButton)
+  for key, virtualButton in pairs(KEY_TO_VIRTUAL_BUTTON) do
+    SetOverrideBindingClick(UIParent, true, key, Constants.PROXY_BUTTON_NAME, virtualButton)
   end
   return true
 end
 
 -- Only used when leaving the Gamepad UI: in keyboard/mouse mode a lingering
--- override would swallow the player's own PAD3/PAD4 bindings.
+-- override would swallow the player's own PAD3/PAD4 bindings. While the Gamepad
+-- UI is on, Blizzard's own binding stack replaces ours whenever it rebinds.
 function Actions.ClearBindingsIfOurs()
   if Core.IsRestricted() then
     return
   end
-  for key, virtualButton in pairs(VIRTUAL_BUTTONS) do
+  for key, virtualButton in pairs(KEY_TO_VIRTUAL_BUTTON) do
     if GetBindingAction(key, true) == OurBindingCommand(virtualButton) then
       SetOverrideBinding(UIParent, true, key, nil)
     end
@@ -102,7 +89,7 @@ local function GetCurrentButton(frame)
 end
 
 local function IsContainerItemButton(button)
-  return button.buttonContext == ITEM_CONTEXT and type(button.GetBagID) == "function"
+  return button.buttonContext == Constants.ITEM_BUTTON_CONTEXT and type(button.GetBagID) == "function"
 end
 
 -- Baganator caches item details in button.BGR for both live and cached
@@ -120,14 +107,23 @@ local function IsAtMerchant()
 end
 
 local function IsBankOpen()
-  if C_PlayerInteractionManager and C_PlayerInteractionManager.IsInteractingWithNpcOfType and Enum and Enum.PlayerInteractionType then
+  if C_PlayerInteractionManager and C_PlayerInteractionManager.IsInteractingWithNpcOfType
+    and Enum and Enum.PlayerInteractionType then
     return C_PlayerInteractionManager.IsInteractingWithNpcOfType(Enum.PlayerInteractionType.Banker)
   end
   return false
 end
 
-local function GetItemInfo(button)
+local function GetContainerItemInfo(button)
   return C_Container.GetContainerItemInfo(button:GetBagID(), button:GetID())
+end
+
+local function CanSplitStack(button)
+  if not button or not IsContainerItemButton(button) or not HasItem(button) then
+    return false
+  end
+  local itemInfo = GetContainerItemInfo(button)
+  return itemInfo ~= nil and not itemInfo.isLocked and (itemInfo.stackCount or 0) > 1
 end
 
 ----------------------------------------------------------------------------
@@ -148,65 +144,34 @@ function Actions.GetSelectLabel(frame)
     end
     return nil
   end
-  if IsContainerItemButton(button) then
-    if HasItem(button) then
-      return L.Get("SELECT", "ACTION_LABEL_SELECT")
-    end
+  if IsContainerItemButton(button) and not HasItem(button) then
     return nil
   end
   return L.Get("SELECT", "ACTION_LABEL_SELECT")
 end
 
-function Actions.GetContextLabel(frame)
-  local button = GetCurrentButton(frame)
-  if not button or CursorHasItem() then
-    return nil
-  end
-
-  local info = addonTable.Frames.GetInfo(frame)
-  if info and info.kind == "guild" then
-    if HasItem(button) and button.tabIndex ~= nil then
-      return L.Get("MOVE", "CONTEXT_ACTION_LABEL_MOVE")
+local function GetMerchantContextLabel(button, bagID, slotID)
+  if InRepairMode() then
+    local durability, maxDurability = C_Container.GetContainerItemDurability(bagID, slotID)
+    if durability and maxDurability and durability < maxDurability then
+      return L.Get("REPAIR", "CONTEXT_ACTION_LABEL_REPAIR")
     end
     return nil
   end
-
-  if not IsContainerItemButton(button) then
-    return nil
+  if HasItem(button) and MerchantFrame.selectedTab == 1 then
+    return L.Get("SELL", "CONTEXT_ACTION_LABEL_SELL")
   end
+  return nil
+end
 
-  local bagID, slotID = button:GetBagID(), button:GetID()
-
-  if IsAtMerchant() then
-    if InRepairMode() then
-      local durability, maxDurability = C_Container.GetContainerItemDurability(bagID, slotID)
-      if durability and maxDurability and durability < maxDurability then
-        return L.Get("REPAIR", "CONTEXT_ACTION_LABEL_REPAIR")
-      end
-      return nil
-    end
-    if HasItem(button) and MerchantFrame.selectedTab == 1 then
-      return L.Get("SELL", "CONTEXT_ACTION_LABEL_SELL")
-    end
-    return nil
-  end
-
-  if not HasItem(button) then
-    return nil
-  end
-
-  if IsBankOpen() then
-    return L.Get("MOVE", "CONTEXT_ACTION_LABEL_MOVE")
-  end
-
-  local itemInfo = GetItemInfo(button)
+local function GetItemContextLabel(button)
+  local itemInfo = GetContainerItemInfo(button)
   if itemInfo and itemInfo.hasLoot then
     return L.Get("OPEN", "CONTEXT_ACTION_LABEL_OPEN")
   end
   if button.IsReadable and button:IsReadable() then
     return L.Get("READ", "CONTEXT_ACTION_LABEL_READ")
   end
-
   local itemID = (itemInfo and itemInfo.itemID) or (button.BGR and button.BGR.itemID)
   if itemID and C_Item then
     if C_Item.IsEquippableItem and C_Item.IsEquippableItem(itemID) then
@@ -219,35 +184,49 @@ function Actions.GetContextLabel(frame)
   return nil
 end
 
+-- Returns the label of the X action for the focused button, or nil when X has
+-- nothing to do. Mirrors what a right click on the button would achieve.
+function Actions.GetContextLabel(frame)
+  local button = GetCurrentButton(frame)
+  if not button or CursorHasItem() then
+    return nil
+  end
+
+  local info = addonTable.Frames.GetInfo(frame)
+  if info and info.kind == Kind.Guild then
+    if HasItem(button) and button.tabIndex ~= nil then
+      return L.Get("MOVE", "CONTEXT_ACTION_LABEL_MOVE")
+    end
+    return nil
+  end
+
+  if not IsContainerItemButton(button) then
+    return nil
+  end
+
+  if IsAtMerchant() then
+    return GetMerchantContextLabel(button, button:GetBagID(), button:GetID())
+  end
+  if not HasItem(button) then
+    return nil
+  end
+  if IsBankOpen() then
+    return L.Get("MOVE", "CONTEXT_ACTION_LABEL_MOVE")
+  end
+  return GetItemContextLabel(button)
+end
+
 function Actions.CanOpenMoreActions(frame)
   if CursorHasItem() or type(MenuUtil) ~= "table" or type(MenuUtil.CreateContextMenu) ~= "function" then
     return false
   end
   local info = addonTable.Frames.GetInfo(frame)
-  if not info then
-    return false
-  end
-  return info.kind == "backpack" or info.kind == "bank"
+  return info ~= nil and (info.kind == Kind.Backpack or info.kind == Kind.Bank)
 end
 
 ----------------------------------------------------------------------------
 -- Performing actions
 ----------------------------------------------------------------------------
-
-function Actions.OnProxyClick(virtualButton)
-  if not Core.IsGamepadUIEnabled() then
-    return
-  end
-  local frame = Core.GetFocusedFrame()
-  if not frame or not frame:IsVisible() or not addonTable.Frames.GetInfo(frame) then
-    return
-  end
-  if virtualButton == "Context" then
-    Actions.DoContextAction(frame)
-  elseif virtualButton == "More" then
-    Actions.OpenMoreActions(frame)
-  end
-end
 
 function Actions.DoContextAction(frame)
   if not Actions.GetContextLabel(frame) then
@@ -264,19 +243,11 @@ function Actions.DoContextAction(frame)
   addonTable.Legend.RequestRefresh(frame)
 end
 
-local function CanSplitStack(button)
-  if not button or not IsContainerItemButton(button) or not HasItem(button) then
-    return false
-  end
-  local itemInfo = GetItemInfo(button)
-  return itemInfo ~= nil and not itemInfo.isLocked and (itemInfo.stackCount or 0) > 1
-end
-
 local function SplitStack(button)
   if not CanSplitStack(button) or not StackSplitFrame then
     return
   end
-  local itemInfo = GetItemInfo(button)
+  local itemInfo = GetContainerItemInfo(button)
   if not button.SplitStack then
     button.SplitStack = function(owner, split)
       C_Container.SplitContainerItem(owner:GetBagID(), owner:GetID(), split)
@@ -292,63 +263,86 @@ local function TriggerBaganator(eventName)
   end
 end
 
+-- Baganator exposes sorting on the view itself (backpack) or on the current
+-- tab (bank views).
+local function GetSorter(frame)
+  if type(frame.CombineStacksAndSort) == "function" then
+    return frame
+  end
+  local tab = frame.currentTab
+  if tab and type(tab.CombineStacksAndSort) == "function" then
+    return tab
+  end
+  return nil
+end
+
+local function PopulateMoreActionsMenu(frame, button, rootDescription)
+  local info = addonTable.Frames.GetInfo(frame)
+  rootDescription:SetTag("MENU_BAGANATOR_CONTROLLER_MORE_ACTIONS")
+
+  if button and CanSplitStack(button) then
+    rootDescription:CreateButton(L.Get("SPLIT_STACK", "CONTEXT_ACTION_LABEL_SPLIT_ITEM_STACK"), function()
+      SplitStack(button)
+    end)
+    rootDescription:CreateDivider()
+  end
+
+  local sorter = GetSorter(frame)
+  if sorter then
+    rootDescription:CreateButton(L.Get("SORT", "BAG_CLEANUP_BAGS", "BAGANATOR_L_SORT"), function()
+      sorter:CombineStacksAndSort(false)
+    end)
+  end
+
+  if info.kind == Kind.Backpack then
+    if type(frame.ToggleBagSlots) == "function" then
+      rootDescription:CreateButton(L.Get("BAG_SLOTS", "BAGANATOR_L_BAG_SLOTS"), function()
+        frame:ToggleBagSlots()
+        addonTable.Frames.RequestRefresh()
+      end)
+    end
+    if type(frame.ToggleBank) == "function" then
+      rootDescription:CreateButton(L.Get("BANK", "BAGANATOR_L_BANK", "BANK"), function()
+        frame:ToggleBank()
+      end)
+    end
+    rootDescription:CreateButton(L.Get("ALL_CHARACTERS", "BAGANATOR_L_ALL_CHARACTERS"), function()
+      TriggerBaganator("CharacterSelectToggle")
+    end)
+    rootDescription:CreateButton(L.Get("CURRENCIES", "BAGANATOR_L_CURRENCIES"), function()
+      TriggerBaganator("CurrencyPanelToggle")
+    end)
+  end
+
+  rootDescription:CreateDivider()
+  rootDescription:CreateButton(L.Get("CUSTOMISE", "BAGANATOR_L_CUSTOMISE_BAGANATOR"), function()
+    TriggerBaganator("ShowCustomise")
+  end)
+end
+
 function Actions.OpenMoreActions(frame)
   if not Actions.CanOpenMoreActions(frame) then
     return
   end
-  local info = addonTable.Frames.GetInfo(frame)
   local button = GetCurrentButton(frame)
-  local owner = button or frame
-
-  MenuUtil.CreateContextMenu(owner, function(_, rootDescription)
-    rootDescription:SetTag("MENU_BAGANATOR_CONTROLLER_MORE_ACTIONS")
-
-    local addedItemActions = false
-    if button and CanSplitStack(button) then
-      rootDescription:CreateButton(L.Get("SPLIT_STACK", "CONTEXT_ACTION_LABEL_SPLIT_ITEM_STACK"), function()
-        SplitStack(button)
-      end)
-      addedItemActions = true
-    end
-    if addedItemActions then
-      rootDescription:CreateDivider()
-    end
-
-    local sorter = frame
-    if type(sorter.CombineStacksAndSort) ~= "function" and frame.currentTab and type(frame.currentTab.CombineStacksAndSort) == "function" then
-      sorter = frame.currentTab
-    end
-    if type(sorter.CombineStacksAndSort) == "function" then
-      rootDescription:CreateButton(L.Get("SORT", "BAG_CLEANUP_BAGS", "BAGANATOR_L_SORT"), function()
-        sorter:CombineStacksAndSort(false)
-      end)
-    end
-
-    if info.kind == "backpack" then
-      if type(frame.ToggleBagSlots) == "function" then
-        rootDescription:CreateButton(L.Get("BAG_SLOTS", "BAGANATOR_L_BAG_SLOTS"), function()
-          frame:ToggleBagSlots()
-          addonTable.Frames.RequestRefresh()
-        end)
-      end
-      if type(frame.ToggleBank) == "function" then
-        rootDescription:CreateButton(L.Get("BANK", "BAGANATOR_L_BANK", "BANK"), function()
-          frame:ToggleBank()
-        end)
-      end
-      rootDescription:CreateButton(L.Get("ALL_CHARACTERS", "BAGANATOR_L_ALL_CHARACTERS"), function()
-        TriggerBaganator("CharacterSelectToggle")
-      end)
-      rootDescription:CreateButton(L.Get("CURRENCIES", "BAGANATOR_L_CURRENCIES"), function()
-        TriggerBaganator("CurrencyPanelToggle")
-      end)
-    end
-
-    rootDescription:CreateDivider()
-    rootDescription:CreateButton(L.Get("CUSTOMISE", "BAGANATOR_L_CUSTOMISE_BAGANATOR"), function()
-      TriggerBaganator("ShowCustomise")
-    end)
+  MenuUtil.CreateContextMenu(button or frame, function(_, rootDescription)
+    PopulateMoreActionsMenu(frame, button, rootDescription)
   end)
+end
+
+local function OnProxyClick(_, virtualButton)
+  if not Core.IsGamepadUIEnabled() then
+    return
+  end
+  local frame = Core.GetFocusedFrame()
+  if not frame or not frame:IsVisible() or not addonTable.Frames.GetInfo(frame) then
+    return
+  end
+  if virtualButton == VirtualButton.Context then
+    Actions.DoContextAction(frame)
+  elseif virtualButton == VirtualButton.More then
+    Actions.OpenMoreActions(frame)
+  end
 end
 
 -- Called by SmartNavigation (through Blizzard's taint barrier) when B is
@@ -361,11 +355,30 @@ function Actions.CloseHandler(frame)
     return true
   end
   local info = addonTable.Frames.GetInfo(frame)
-  if info and info.kind == "backpack" and Baganator and Baganator.CallbackRegistry then
+  if info and info.kind == Kind.Backpack and Baganator and Baganator.CallbackRegistry then
     -- Let Baganator close its backpack the way its own close button does.
     Baganator.CallbackRegistry:TriggerEvent("BagHide")
   else
     frame:Hide()
   end
   return true
+end
+
+----------------------------------------------------------------------------
+-- Setup
+----------------------------------------------------------------------------
+
+function Actions.Initialize()
+  if proxy then
+    return
+  end
+  proxy = CreateFrame("Button", Constants.PROXY_BUTTON_NAME, UIParent)
+  proxy:SetSize(1, 1)
+  proxy:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", -10, -10)
+  proxy:SetAlpha(0)
+  proxy:EnableMouse(false)
+  proxy:RegisterForClicks("AnyDown")
+  proxy:SetScript("OnClick", OnProxyClick)
+
+  Core.RegisterCallback(Constants.Events.FrameFocused, Actions.ApplyBindings)
 end

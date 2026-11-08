@@ -4,8 +4,21 @@ Companion addon that makes [Baganator](https://www.curseforge.com/wow/addons/bag
 work with the **World of Warcraft: Forever** Gamepad UI (the native controller
 mode that is currently in beta).
 
-Install it next to Baganator and Syndicator. It does nothing on other clients
-or while the Gamepad UI is switched off, so it is safe to leave enabled.
+It does nothing on other clients or while the Gamepad UI is switched off, so it
+is safe to leave enabled.
+
+## Installation
+
+Requires Baganator and Syndicator (Syndicator is Baganator's own dependency).
+
+* **CurseForge / Wago:** install the Forever-flavoured package next to
+  Baganator.
+* **Manual:** copy (or clone) this repository into
+  `World of Warcraft\_forever_\Interface\AddOns\Baganator_Controller`
+  (`_classic_beta_` while the beta client is still in use). The folder name
+  must be `Baganator_Controller` to match the `.toc` file.
+
+Enable the Gamepad UI in Options, open your bags and press the D-pad.
 
 ## What was broken
 
@@ -100,19 +113,67 @@ Type `/bgrc` for a status report (whether the gamepad API was found, whether
 the Gamepad UI is on, how many Baganator frames are known and registered, and
 which frame is focused). `/bgrc debug` toggles verbose chat output.
 
-## Development
+If the chat shows "Interface action failed because of an AddOn", please
+include the `/bgrc` output and what you were doing in a bug report.
 
-The Lua files are plain WoW addon code. `tests/` holds a stub WoW environment
-and a scripted walkthrough of the main scenarios:
+## Compatibility notes for Forever
+
+* Forever's interface number is `16001` (game version 1.60.1); the game type
+  is `camelot`, with `forever` as an alias. The TOC declares both
+  `## Interface: 16001` and `## AllowLoadGameType: camelot`, so the addon is
+  never loaded on Retail or Classic clients even with "load out of date addons"
+  enabled.
+* `## Group: Baganator` nests the addon under Baganator in the AddOn list;
+  the `## Category-*` lines mirror Baganator's so both sit in *Inventory*.
+* Forever uses the modern (Midnight) API: `C_Item`, `C_Container`, the menu
+  system (`MenuUtil`) and secret values. This addon only reads container item
+  info and merchant/bank state, none of which are secret.
+
+## Repository layout
 
 ```
+Baganator_Controller.toc   load order and metadata
+Locales.lua                strings, preferring Blizzard/Baganator translations
+Constants.lua              names, window kinds, internal event names
+Core.lua                   environment checks, shared helpers, internal events, init
+Legend.lua                 button prompt footer under the focused window
+Actions.lua                A/B/X/Y behaviour and the X/Y override bindings
+Frames.lua                 discovery of Baganator windows, focus registration
+BlizzardCompat.lua         radial menu and hidden Blizzard frame fixes
+Commands.lua               /bgrc status command
+tests/                     stub WoW environment and scripted smoke tests
+.luacheckrc                static analysis configuration
+.pkgmeta                   BigWigs packager configuration
+.github/workflows/         CI: luacheck + smoke tests; release packaging on tags
+```
+
+## Development
+
+The Lua files are plain WoW addon code (Lua 5.1). Two checks run in CI and can
+be run locally:
+
+```
+# static analysis (https://github.com/lunarmodules/luacheck)
+luacheck .
+
+# scripted smoke tests against tests/wow_stubs.lua (Lua 5.1 via lupa)
 pip install lupa
 python3 tests/run.py
 ```
 
 The stubs model only what this addon touches; they are a smoke test for load
-order, nil globals and control flow, not a substitute for testing in the
-client.
+order, undefined globals and control flow, not a substitute for testing in the
+client. Any read of a global the stubs do not define fails the run.
+
+### Releasing
+
+Pushing an annotated tag such as `v1.0.0` runs the
+[BigWigs packager](https://github.com/BigWigsMods/packager), which substitutes
+`@project-version@` in the TOC, builds `Baganator_Controller.zip` and attaches
+it to a GitHub release. The packager recognises the `16xxx` interface number and
+tags the build for Forever. To also upload to CurseForge or Wago, add the
+`CF_API_KEY` / `WAGO_API_TOKEN` repository secrets and the
+`## X-Curse-Project-ID` / `## X-Wago-ID` lines to the TOC.
 
 ## License
 
