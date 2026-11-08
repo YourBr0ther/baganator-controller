@@ -75,15 +75,7 @@ Enable the Gamepad UI, open your bags and use the controller.
 
 The Forever client drives its controller mode through two Blizzard systems: `GamepadMode.FrameControlsManager`, which tracks open windows and focus, and `SmartNavigation`, which scans the focused window for buttons and moves the D-pad cursor. Windows take part by calling `FrameControlsManager:FrameShown` when they open. Baganator's windows are not UI panels and never make that call.
 
-This addon:
-
-- discovers Baganator's windows through its public skin API (`Baganator.API.Skins`) and calls `FrameShown`/`FrameHidden` as they are shown and hidden, using the insecure entry points Blizzard exposes through `SecureHelper`;
-- sets the initial cursor target to the top-left item and refreshes SmartNavigation's button scan whenever Baganator finishes a layout pass;
-- draws button prompts with Blizzard's prompt footer, created without bound functions so it never touches the gamepad binding stack;
-- binds X and Y with `SetOverrideBindingClick` at the same priority as Blizzard's binding stack, so Blizzard's rebinds always replace them, and performs the X action as a right click on the focused item button;
-- mirrors Blizzard's combined bag frame state so `IsBagOpen()` and the radial menu stay consistent, and unregisters Blizzard's hidden bank and container frames if the client registers them.
-
-Nothing is written into Blizzard's tables from addon code; all state changes go through the trampolined calls or the frame callbacks (`FocusGamepad`, `UnfocusGamepad`, `SmartNavigationCloseHandler`, `smartNavPanelInfoAddedCallback`, `SmartNavigationOnSelect`) that Blizzard invokes through a taint barrier.
+This addon discovers Baganator's windows through `Baganator.API.Skins`, calls `FrameShown`/`FrameHidden` as they open and close, points the cursor at the top-left item and re-scans buttons after each Baganator layout pass. Prompts use Blizzard's footer with no bound functions. X and Y are bound with `SetOverrideBindingClick` at Blizzard's own priority, so Blizzard's rebinds replace them; X performs a right click on the focused item. Blizzard's combined bag frame state is mirrored so `IsBagOpen()` and the radial menu stay consistent, and hidden Blizzard bank and container frames are unregistered if the client registers them.
 
 ## Project layout
 
@@ -113,7 +105,7 @@ pip install lupa
 python3 tests/run.py
 ```
 
-The smoke tests load the addon in TOC order against `tests/wow_stubs.lua` and walk through login, window show/hide, focus, X/Y actions, combat deferral and mode switches. Any read of a global the stubs do not define fails the run. They verify control flow, not client behaviour; changes should also be tested in game.
+The smoke tests load the addon in TOC order against `tests/wow_stubs.lua` and cover login, window show/hide, focus, X/Y actions, combat deferral and mode switches. They verify control flow, not client behaviour; test changes in game as well.
 
 ### Releasing
 

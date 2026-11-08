@@ -1,13 +1,9 @@
 local _, addonTable = ...
 
 --[[
-  Button prompt legend ("footer") shown under a focused Baganator window.
-
-  We reuse Blizzard's PromptedBindingFooter purely for its visuals. Every prompt
-  is created without a bound function, so PromptedBindingFooterMixin never
-  creates a binding group and never touches the gamepad binding stack. The
-  actual button handling lives in Actions.lua (SmartNavigation handles A/B
-  itself; X/Y are routed through our own override binding).
+  Button prompt footer under the focused window. Uses Blizzard's
+  PromptedBindingFooter for visuals only: prompts carry no bound functions, so
+  the footer never creates a binding group. Input handling is in Actions.lua.
 ]]
 
 addonTable.Legend = {}
@@ -20,8 +16,7 @@ local footers = {}
 local refreshQueued = {}
 
 local function AddPrompt(footer, key, debugName, labelOrFunc, condition)
-  -- Passing a string as the second argument yields an "extensible" prompted
-  -- binding with no bound function attached (see Blizzard's PromptedBinding.lua).
+  -- A string second argument creates a prompt with no bound function.
   local prompt = GamepadSharedUtility.CreatePromptedBinding(key, debugName)
   prompt:AddFooterBinding({
     label = labelOrFunc,
@@ -76,8 +71,7 @@ local function GetOrCreateFooter(frame)
 end
 
 local function PositionFooter(frame, footer)
-  -- Baganator windows usually sit at the bottom edge of the screen where the
-  -- default "below the frame" placement would be clipped, so flip above.
+  -- Flip above windows docked at the bottom of the screen.
   local bottom = frame:GetBottom()
   local scale = frame:GetEffectiveScale()
   if bottom and scale and (bottom * scale) < Constants.LEGEND_FLIP_THRESHOLD then
@@ -120,7 +114,6 @@ function Legend.Refresh(frame)
   end
 end
 
--- Coalesce bursts of refresh requests (bag updates fire several per frame).
 function Legend.RequestRefresh(frame)
   if refreshQueued[frame] then
     return

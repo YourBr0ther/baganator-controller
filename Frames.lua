@@ -1,23 +1,11 @@
 local _, addonTable = ...
 
 --[[
-  Discovers Baganator's windows and registers them with Blizzard's gamepad
-  focus manager while they are shown.
-
-  Baganator announces every frame it creates through its public skin API
-  (Baganator.API.Skins.GetAllFrames / RegisterListener). Frames of region type
-  "ButtonFrame" are the top level windows: backpack and bank views (one per
-  skin and view type), the guild bank, character select, currency panel and
-  the customise dialog. We hook OnShow/OnHide on each of them and mirror that
-  state into GamepadMode.FrameControlsManager, which gives us:
-
-    * D-pad cursor navigation over every button in the window (item buttons,
-      toolbar buttons, bag slots) via SmartNavigation,
-    * A to click, B to close,
-    * LT/RT paging between this window and other open windows (vendor, bank,
-      character frame), including Blizzard's own LT/RT jump hint icons,
-    * the focus glow, since Baganator's windows inherit ButtonFrameTemplate
-      which already carries Blizzard's FocusFramesInterfaceMixin.
+  Discovers Baganator's windows through its skin API (every "ButtonFrame"
+  region) and mirrors their visibility into GamepadMode.FrameControlsManager.
+  Registration gives D-pad navigation, A/B, LT/RT paging and the focus glow
+  (Baganator's windows inherit ButtonFrameTemplate, which carries Blizzard's
+  FocusFramesInterfaceMixin).
 ]]
 
 addonTable.Frames = {}
@@ -28,7 +16,6 @@ local Constants = addonTable.Constants
 local Events = Constants.Events
 
 local infoByFrame = {}
-Frames.infoByFrame = infoByFrame
 
 local refreshQueued = false
 
@@ -52,6 +39,15 @@ function Frames.GetInfo(frame)
   return infoByFrame[frame]
 end
 
+function Frames.AnyVisible(kind)
+  for frame, info in pairs(infoByFrame) do
+    if info.kind == kind and frame:IsVisible() then
+      return true
+    end
+  end
+  return false
+end
+
 function Frames.GetCounts()
   local known, tracked = 0, 0
   for frame in pairs(infoByFrame) do
@@ -67,7 +63,6 @@ end
 -- Finding a sensible button for the cursor to start on
 ----------------------------------------------------------------------------
 
--- Top-left visible item button inside the window's item area.
 function Frames.FindFirstItemButton(frame)
   local root = frame.Container or frame
   local best, bestLeft, bestTop
@@ -113,8 +108,7 @@ local function ApplyMarkers(info)
   if info.markersApplied then
     return
   end
-  -- The search box needs a keyboard; keep the cursor out of it so A never
-  -- hands keyboard focus to an edit box the player cannot type into.
+  -- The search box needs a keyboard; keep the cursor out of it.
   if info.frame.SearchWidget then
     SmartNavigation_MarkFrameIgnored(info.frame.SearchWidget)
   end
@@ -144,7 +138,6 @@ local function OnFrameShow(frame)
     return
   end
   Core.TriggerEvent(Events.FrameVisibilityChanged, info, true)
-  -- Registration is deferred to Frames.Sync (PLAYER_REGEN_ENABLED) in combat.
   if Core.CanTouchGamepadUI() then
     Register(info)
   end
@@ -219,9 +212,8 @@ end
 -- Keeping Blizzard's bookkeeping in step with reality
 ----------------------------------------------------------------------------
 
--- Re-registers shown frames and unregisters hidden ones. Used after combat
--- (where none of the Blizzard calls are permitted), after the Gamepad UI is
--- switched on, and at login.
+-- Brings the focus manager in line with what is visible; used at login, after
+-- combat and when the Gamepad UI is switched on.
 function Frames.Sync()
   if not Core.CanTouchGamepadUI() then
     return
@@ -241,9 +233,8 @@ function Frames.Sync()
   end
 end
 
--- Baganator rebuilds and re-parents its item buttons whenever the inventory
--- changes; SmartNavigation only re-scans a frame on its own when CreateFrame
--- is called with a child, so re-scan ourselves when a view finishes laying out.
+-- Baganator re-parents item buttons on every layout pass, which SmartNavigation
+-- does not notice on its own.
 function Frames.RefreshNavigation()
   if not Core.CanTouchGamepadUI() then
     return

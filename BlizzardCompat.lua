@@ -1,18 +1,10 @@
 local _, addonTable = ...
 
 --[[
-  Smooths over the places where Blizzard's gamepad code still talks to the
-  default bag and bank frames that Baganator has parented to a hidden frame.
-
-  1. BankFrame (and GuildBankFrame) are opened with ShowUIPanel, which the
-     focus manager listens to, so an invisible frame gets registered and may
-     even take focus. We unregister any such frame straight after it is added.
-
-  2. The radial menu's "Bags" segment calls ToggleBackpack_Combined directly,
-     which only shows/hides the hidden ContainerFrameCombinedBags. We mirror
-     that toggle onto Baganator, and keep ContainerFrameCombinedBags' shown
-     state in step with Baganator's backpack so IsBagOpen() (used by the radial
-     to draw the open/closed state) stays truthful.
+  Blizzard's gamepad code still addresses the default bag and bank frames that
+  Baganator parents into a hidden frame: ShowUIPanel(BankFrame) registers an
+  invisible frame for focus, and the radial menu's "Bags" entry calls
+  ToggleBackpack_Combined. Both are redirected here.
 ]]
 
 addonTable.BlizzardCompat = {}
@@ -51,15 +43,9 @@ end
 ----------------------------------------------------------------------------
 
 local function AnyBackpackVisible()
-  for frame, info in pairs(addonTable.Frames.infoByFrame) do
-    if info.kind == Constants.Kind.Backpack and frame:IsVisible() then
-      return true
-    end
-  end
-  return false
+  return addonTable.Frames.AnyVisible(Constants.Kind.Backpack)
 end
 
--- True when Baganator has moved Blizzard's combined bag frame out of the way.
 local function IsBlizzardBagFrameHiddenByBaganator()
   return ContainerFrameCombinedBags ~= nil
     and not ContainerFrameCombinedBags:IsVisible()
@@ -82,8 +68,7 @@ local function OnToggleBackpackCombined()
   if not Core.IsGamepadUIEnabled() or not IsBlizzardBagFrameHiddenByBaganator() then
     return
   end
-  -- Baganator already handles ToggleBackpack/ToggleAllBags/OpenAllBags/
-  -- CloseAllBags itself; only react to direct callers such as the radial menu.
+  -- Baganator hooks these callers itself; react only to direct calls (radial menu).
   local stack = debugstack(1, 10, 0) or ""
   if stack:find("`ToggleBackpack'", 1, true)
     or stack:find("ToggleAllBags", 1, true)

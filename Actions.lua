@@ -1,24 +1,11 @@
 local _, addonTable = ...
 
 --[[
-  Gamepad actions for Baganator windows.
-
-  A (PAD1)  SmartNavigation clicks the focused button: pick up / place / swap
-            items, press toolbar buttons. Secure, nothing to do here.
-  B (PAD2)  SmartNavigation asks the frame to close via
-            SmartNavigationCloseHandler; we drop a held item first, like
-            Blizzard's bags.
-  X (PAD3)  Context action on the focused item: Sell/Repair at a vendor, Move
-            while the bank is open, otherwise Open/Read/Equip/Use. Implemented
-            as a right click on the item button, exactly what the mouse does.
-  Y (PAD4)  "More actions" context menu: split stack, sort, toggle bag slots,
-            bank, all characters, currencies, Baganator settings.
-
-  X and Y are bound with SetOverrideBindingClick on UIParent with the same
-  priority flag Blizzard's own gamepad binding stack uses, so any later Blizzard
-  rebinding of those keys simply replaces ours. The proxy button checks that a
-  Baganator window is still the focused frame before acting, so a stale binding
-  is a no-op rather than a surprise.
+  Controller actions for Baganator windows. A and B are handled by Blizzard's
+  SmartNavigation (click / close handler). X and Y are bound with
+  SetOverrideBindingClick on UIParent at the same priority as Blizzard's
+  gamepad binding stack, so Blizzard's rebinds replace them; the proxy button
+  ignores presses unless a Baganator window is the focused frame.
 ]]
 
 addonTable.Actions = {}
@@ -47,18 +34,17 @@ end
 
 function Actions.ApplyBindings()
   if not proxy or Core.IsRestricted() then
-    return false
+    return
   end
   for key, virtualButton in pairs(KEY_TO_VIRTUAL_BUTTON) do
     SetOverrideBindingClick(UIParent, true, key, Constants.PROXY_BUTTON_NAME, virtualButton)
   end
-  return true
 end
 
--- Only used when leaving the Gamepad UI: in keyboard/mouse mode a lingering
--- override would swallow the player's own PAD3/PAD4 bindings. While the Gamepad
--- UI is on, Blizzard's own binding stack replaces ours whenever it rebinds.
-function Actions.ClearBindingsIfOurs()
+-- In keyboard/mouse mode a lingering override would swallow the player's own
+-- PAD3/PAD4 bindings; while the Gamepad UI is on, Blizzard's binding stack
+-- replaces ours itself.
+function Actions.OnGamepadUIDisabled()
   if Core.IsRestricted() then
     return
   end
@@ -67,10 +53,6 @@ function Actions.ClearBindingsIfOurs()
       SetOverrideBinding(UIParent, true, key, nil)
     end
   end
-end
-
-function Actions.OnGamepadUIDisabled()
-  Actions.ClearBindingsIfOurs()
 end
 
 ----------------------------------------------------------------------------
@@ -92,8 +74,7 @@ local function IsContainerItemButton(button)
   return button.buttonContext == Constants.ITEM_BUTTON_CONTEXT and type(button.GetBagID) == "function"
 end
 
--- Baganator caches item details in button.BGR for both live and cached
--- (other character) buttons; live buttons also carry Blizzard's hasItem flag.
+-- Live buttons carry Blizzard's hasItem flag; cached (other character) buttons only have BGR.
 local function HasItem(button)
   if button.hasItem == true then
     return true
@@ -184,8 +165,7 @@ local function GetItemContextLabel(button)
   return nil
 end
 
--- Returns the label of the X action for the focused button, or nil when X has
--- nothing to do. Mirrors what a right click on the button would achieve.
+-- Label of the X action for the focused button, or nil. Mirrors a right click.
 function Actions.GetContextLabel(frame)
   local button = GetCurrentButton(frame)
   if not button or CursorHasItem() then
@@ -236,9 +216,7 @@ function Actions.DoContextAction(frame)
   if not button then
     return
   end
-  -- Same code path as a physical right click on the item button. This runs
-  -- inside a hardware (gamepad) input event, so protected item APIs such as
-  -- UseContainerItem are permitted.
+  -- Runs inside a hardware input event, so protected item APIs are permitted.
   button:Click("RightButton")
   addonTable.Legend.RequestRefresh(frame)
 end
@@ -263,8 +241,7 @@ local function TriggerBaganator(eventName)
   end
 end
 
--- Baganator exposes sorting on the view itself (backpack) or on the current
--- tab (bank views).
+-- Sorting lives on the view (backpack) or on the current tab (bank).
 local function GetSorter(frame)
   if type(frame.CombineStacksAndSort) == "function" then
     return frame
@@ -345,9 +322,7 @@ local function OnProxyClick(_, virtualButton)
   end
 end
 
--- Called by SmartNavigation (through Blizzard's taint barrier) when B is
--- pressed while one of our frames is active. Returning true tells Blizzard the
--- close was handled.
+-- SmartNavigationCloseHandler for registered frames; true means handled.
 function Actions.CloseHandler(frame)
   if CursorHasItem() then
     ClearCursor()
@@ -356,7 +331,6 @@ function Actions.CloseHandler(frame)
   end
   local info = addonTable.Frames.GetInfo(frame)
   if info and info.kind == Kind.Backpack and Baganator and Baganator.CallbackRegistry then
-    -- Let Baganator close its backpack the way its own close button does.
     Baganator.CallbackRegistry:TriggerEvent("BagHide")
   else
     frame:Hide()

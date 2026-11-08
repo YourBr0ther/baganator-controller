@@ -19,12 +19,8 @@ globals = {
 
 -- WoW API and Blizzard UI globals read by this addon
 read_globals = {
-  -- Lua additions in the WoW client
-  "strsplit", "tContains",
-
   -- Frames and widgets
-  "CreateFrame", "UIParent", "MerchantFrame", "StackSplitFrame", "BankFrame", "GuildBankFrame",
-  "ContainerFrameCombinedBags",
+  "CreateFrame", "UIParent", "MerchantFrame", "StackSplitFrame", "ContainerFrameCombinedBags",
 
   -- Addon / general API
   "GetBuildInfo", "InCombatLockdown", "C_RestrictedActions", "C_Timer", "RunNextFrame",

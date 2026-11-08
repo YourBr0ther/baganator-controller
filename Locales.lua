@@ -1,13 +1,10 @@
 local _, addonTable = ...
 
--- Strings shown by this addon. Wherever Blizzard or Baganator already ship a
--- localized string for the same concept we use theirs at runtime (see
--- addonTable.Locales.Get), so this table only has to carry English fallbacks.
+-- English fallbacks; Locales.Get prefers Blizzard/Baganator translations.
 local L = {
   ADDON_NAME = "Baganator Controller",
   SELECT = "Select",
   PLACE = "Place",
-  PICK_UP = "Pick Up",
   CLOSE = "Close",
   BACK = "Back",
   MORE_ACTIONS = "More Actions",
@@ -38,9 +35,7 @@ local L = {
 
 addonTable.Locales = L
 
--- Returns the first non-empty string among the given candidates. Candidates
--- are looked up as global variable names first (so Blizzard/Baganator
--- translations win), then fall back to our own table, then to the literal.
+-- Returns the first defined global string among the candidates, else L[key].
 function addonTable.Locales.Get(key, ...)
   for i = 1, select("#", ...) do
     local candidate = select(i, ...)

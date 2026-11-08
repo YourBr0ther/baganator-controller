@@ -3,6 +3,7 @@ package-as: Baganator_Controller
 enable-nolib-creation: no
 
 ignore:
+  - .luacheckrc
   - README.md
   - CHANGELOG.md
   - tests
