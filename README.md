@@ -1,181 +1,128 @@
 # Baganator Controller
 
-Companion addon that makes [Baganator](https://www.curseforge.com/wow/addons/baganator)
-work with the **World of Warcraft: Forever** Gamepad UI (the native controller
-mode that is currently in beta).
+Gamepad UI support for [Baganator](https://www.curseforge.com/wow/addons/baganator) on World of Warcraft: Forever.
 
-It does nothing on other clients or while the Gamepad UI is switched off, so it
-is safe to leave enabled.
+Baganator Controller registers Baganator's bag, bank and guild bank windows with the Forever client's native controller mode, giving them D-pad navigation, button prompts, focus switching with LT/RT and a working **Bags** entry in the radial menu.
+
+## Features
+
+- D-pad cursor navigation over items, bag slots and toolbar buttons in every Baganator window
+- Pick up, place and swap items with A; drop a held item or close the window with B
+- Context-aware X action: Sell or Repair at a vendor, Move while the bank is open, otherwise Open, Read, Equip or Use
+- Y menu with Split Stack, Clean Up Bags, Bag Slots, Bank, All Characters, Currencies and Customise Baganator
+- LT/RT focus switching between Baganator and other open windows, with Blizzard's focus glow and jump hints
+- Radial menu **Bags** entry opens and closes Baganator
+- Combat-safe: deferred registration while addon actions are restricted, re-synced when combat ends
+- Inert outside Forever or while the Gamepad UI is off
+
+## Requirements
+
+| Requirement | Version |
+| --- | --- |
+| World of Warcraft: Forever | 1.60.1 build 70862 or later (interface `16001`) |
+| [Baganator](https://www.curseforge.com/wow/addons/baganator) | 12.1.5 or later |
+| [Syndicator](https://www.curseforge.com/wow/addons/syndicator) | Installed with Baganator |
+
+The Gamepad UI must be enabled in the game's Options. On earlier Forever builds the client rejects addon access to the controller systems and this addon stays dormant.
 
 ## Installation
 
-Requires Baganator and Syndicator (Syndicator is Baganator's own dependency).
+### CurseForge or Wago
 
-* **CurseForge / Wago:** install the Forever-flavoured package next to
-  Baganator.
-* **Manual:** copy (or clone) this repository into
-  `World of Warcraft\_forever_\Interface\AddOns\Baganator_Controller`
-  (`_classic_beta_` while the beta client is still in use). The folder name
-  must be `Baganator_Controller` to match the `.toc` file.
+Install **Baganator Controller** for the Forever game version alongside Baganator.
 
-Enable the Gamepad UI in Options, open your bags and press the D-pad.
+### Manual
 
-## What was broken
+1. Download the latest release zip from the [Releases](../../releases) page.
+2. Extract it so that the folder is named `Baganator_Controller` and sits in your AddOns directory:
 
-With the Gamepad UI enabled Baganator opens, but:
+   ```
+   World of Warcraft\_forever_\Interface\AddOns\Baganator_Controller\
+   ```
 
-* the D-pad cursor never enters the bag window, so no item can be picked up,
-  used or sold with a controller;
-* at a vendor or bank, RT/LT cannot switch to the bags (Blizzard's bags do this);
-* the radial menu's **Bags** entry toggles Blizzard's hidden bag frame instead
-  of Baganator, so it appears to do nothing;
-* when the bank opens, Blizzard registers its now-invisible `BankFrame` for
-  controller focus, leaving the cursor on a frame you cannot see.
+   During the beta the client directory is `_classic_beta_` instead of `_forever_`.
 
-### Why
+3. Restart the client or type `/reload`.
 
-Blizzard's controller mode is driven by two systems in the Forever client:
+## Usage
 
-* `GamepadMode.FrameControlsManager` (`Blizzard_GamepadSharedUtility`) keeps
-  the list of open windows, decides which one has focus, pages between them
-  with LT/RT and shows the focus glow and LT/RT hints.
-* `SmartNavigation` (`Blizzard_GamepadSmartNavigation`) scans the focused
-  window for buttons and moves the D-pad cursor between them.
-
-A window takes part by calling `FrameControlsManager:FrameShown(frame)` when
-it opens (Blizzard's windows do this automatically through `ShowUIPanel`, and
-`ContainerFrameCombinedBags` does it in `ContainerFrame_OnShow`). Baganator
-replaces Blizzard's bag and bank frames with its own windows, which are not UI
-panels and never call `FrameShown`, so the controller systems do not know they
-exist.
-
-Until recently addons could not fix this themselves: the controller code was
-secure-only, which is why other bag addons reported the problem as unfixable.
-In build **1.60.1.70862** (November 7) Blizzard added a secure trampoline
-(`Blizzard_GamepadSmartNavigation/SecureHelper.lua`) that lets addon code call
-`FrameShown`/`FrameHidden`, `SetTargetButtonForFrame`, `RefreshButtonGroups`
-and the `SmartNavigation_*` marker functions while out of combat, and invokes a
-registered frame's `FocusGamepad`, `UnfocusGamepad`,
-`SmartNavigationCloseHandler` and related callbacks through a taint barrier.
-This addon is built on exactly that surface.
-
-## What this addon does
-
-* Finds every Baganator window through Baganator's public skin API
-  (`Baganator.API.Skins`) and registers it with the focus manager while it is
-  shown. Baganator's windows inherit `ButtonFrameTemplate`, which already
-  carries Blizzard's focus glow and LT/RT jump-hint widgets, so those light up
-  automatically.
-* Starts the cursor on the top-left item and re-scans the window whenever
-  Baganator finishes laying out items, so the cursor keeps up with bag updates.
-* Keeps the cursor out of the search box (it needs a keyboard).
-* Shows Blizzard-style button prompts under the focused window.
-* Routes the radial menu's **Bags** entry to Baganator and keeps Blizzard's
-  `IsBagOpen()` state truthful so the radial shows the bag as open/closed.
-* Unregisters Blizzard's hidden `BankFrame`/`GuildBankFrame`/container frames
-  if the client registers them for focus while Baganator is hiding them.
-* Defers every call that Blizzard refuses in combat and re-syncs when combat
-  ends (`PLAYER_REGEN_ENABLED`).
-
-## Controls
+Enable the Gamepad UI, open your bags and use the controller.
 
 | Button | Action |
 | --- | --- |
-| D-pad | Move the cursor between items, bag slots and toolbar buttons |
-| A | Pick up / place / swap the item, or press the button under the cursor |
-| B | Drop a held item; otherwise close the window |
-| X | Context action on the item: **Sell** or **Repair** at a vendor, **Move** while the bank is open, otherwise **Open**, **Read**, **Equip** or **Use** |
-| Y | More actions: Split Stack, Clean Up Bags, Bag Slots, Bank, All Characters, Currencies, Customise Baganator |
-| LT / RT | Switch focus between the bags and other open windows (vendor, bank, character frame) |
-| View / Back (left menu button) | Toggle UI focus on and off, as everywhere else in the Gamepad UI |
+| D-pad | Move the cursor |
+| A | Pick up, place or swap the item; press the button under the cursor |
+| B | Drop the held item, otherwise close the window |
+| X | Context action on the item (Sell, Repair, Move, Open, Read, Equip, Use) |
+| Y | More actions menu |
+| LT / RT | Switch focus between open windows |
+| View / Back | Toggle UI focus on and off |
 
-A and B are handled by Blizzard's own SmartNavigation bindings. X and Y are
-bound through `SetOverrideBindingClick` on `UIParent` with the same priority
-Blizzard's gamepad binding stack uses, so Blizzard's own rebinding of those
-keys always wins; the handler also checks that a Baganator window is still the
-focused frame before doing anything.
+### Commands
 
-## Limitations
-
-* Requires WoW Forever build 1.60.1.70862 or later. On earlier builds the
-  controller code rejects addon calls outright and this addon stays dormant.
-* Nothing can be registered or unregistered while you are in combat (Blizzard
-  blocks those calls). Windows opened in combat become navigable when combat
-  ends; windows closed in combat are cleaned up then.
-* Typing into the search box still needs a keyboard.
-* The guild bank window gets focus, cursor navigation and A/B; X performs a
-  right click (withdraw) on the focused item.
-* Destroying an item is intentionally not offered from the controller menu.
+| Command | Description |
+| --- | --- |
+| `/bgrc` | Print a status report: gamepad API availability, Gamepad UI state, known and registered frames, focused frame |
+| `/bgrc debug` | Toggle verbose chat output |
 
 ## Troubleshooting
 
-Type `/bgrc` for a status report (whether the gamepad API was found, whether
-the Gamepad UI is on, how many Baganator frames are known and registered, and
-which frame is focused). `/bgrc debug` toggles verbose chat output.
+- **The cursor does not enter the bag window.** Run `/bgrc`. If *Gamepad UI API available* is `no`, the client build is too old. If *Registered with the gamepad focus manager* is `0` while a window is open, you were likely in combat when it opened; it registers when combat ends.
+- **"Interface action failed because of an AddOn" in chat.** Please open an issue with the `/bgrc` output and the steps that led to the message.
+- **Typing in the search box.** The search box is excluded from controller navigation and still requires a keyboard.
 
-If the chat shows "Interface action failed because of an AddOn", please
-include the `/bgrc` output and what you were doing in a bug report.
+## How it works
 
-## Compatibility notes for Forever
+The Forever client drives its controller mode through two Blizzard systems: `GamepadMode.FrameControlsManager`, which tracks open windows and focus, and `SmartNavigation`, which scans the focused window for buttons and moves the D-pad cursor. Windows take part by calling `FrameControlsManager:FrameShown` when they open. Baganator's windows are not UI panels and never make that call.
 
-* Forever's interface number is `16001` (game version 1.60.1); the game type
-  is `camelot`, with `forever` as an alias. The TOC declares both
-  `## Interface: 16001` and `## AllowLoadGameType: camelot`, so the addon is
-  never loaded on Retail or Classic clients even with "load out of date addons"
-  enabled.
-* `## Group: Baganator` nests the addon under Baganator in the AddOn list;
-  the `## Category-*` lines mirror Baganator's so both sit in *Inventory*.
-* Forever uses the modern (Midnight) API: `C_Item`, `C_Container`, the menu
-  system (`MenuUtil`) and secret values. This addon only reads container item
-  info and merchant/bank state, none of which are secret.
+This addon:
 
-## Repository layout
+- discovers Baganator's windows through its public skin API (`Baganator.API.Skins`) and calls `FrameShown`/`FrameHidden` as they are shown and hidden, using the insecure entry points Blizzard exposes through `SecureHelper`;
+- sets the initial cursor target to the top-left item and refreshes SmartNavigation's button scan whenever Baganator finishes a layout pass;
+- draws button prompts with Blizzard's prompt footer, created without bound functions so it never touches the gamepad binding stack;
+- binds X and Y with `SetOverrideBindingClick` at the same priority as Blizzard's binding stack, so Blizzard's rebinds always replace them, and performs the X action as a right click on the focused item button;
+- mirrors Blizzard's combined bag frame state so `IsBagOpen()` and the radial menu stay consistent, and unregisters Blizzard's hidden bank and container frames if the client registers them.
+
+Nothing is written into Blizzard's tables from addon code; all state changes go through the trampolined calls or the frame callbacks (`FocusGamepad`, `UnfocusGamepad`, `SmartNavigationCloseHandler`, `smartNavPanelInfoAddedCallback`, `SmartNavigationOnSelect`) that Blizzard invokes through a taint barrier.
+
+## Project layout
 
 ```
 Baganator_Controller.toc   load order and metadata
-Locales.lua                strings, preferring Blizzard/Baganator translations
+Locales.lua                strings, preferring Blizzard and Baganator translations
 Constants.lua              names, window kinds, internal event names
 Core.lua                   environment checks, shared helpers, internal events, init
-Legend.lua                 button prompt footer under the focused window
-Actions.lua                A/B/X/Y behaviour and the X/Y override bindings
-Frames.lua                 discovery of Baganator windows, focus registration
-BlizzardCompat.lua         radial menu and hidden Blizzard frame fixes
-Commands.lua               /bgrc status command
-tests/                     stub WoW environment and scripted smoke tests
-.luacheckrc                static analysis configuration
-.pkgmeta                   BigWigs packager configuration
-.github/workflows/         CI: luacheck + smoke tests; release packaging on tags
+Legend.lua                 button prompt footer
+Actions.lua                A/B/X/Y behaviour and X/Y override bindings
+Frames.lua                 window discovery and focus registration
+BlizzardCompat.lua         radial menu and hidden Blizzard frame handling
+Commands.lua               /bgrc
+tests/                     stub environment and smoke tests
 ```
 
 ## Development
 
-The Lua files are plain WoW addon code (Lua 5.1). Two checks run in CI and can
-be run locally:
+Lua 5.1, no build step. Two checks run in CI (`.github/workflows/test.yml`) and locally:
 
-```
-# static analysis (https://github.com/lunarmodules/luacheck)
+```sh
+# static analysis
 luacheck .
 
-# scripted smoke tests against tests/wow_stubs.lua (Lua 5.1 via lupa)
+# smoke tests against a stub client environment
 pip install lupa
 python3 tests/run.py
 ```
 
-The stubs model only what this addon touches; they are a smoke test for load
-order, undefined globals and control flow, not a substitute for testing in the
-client. Any read of a global the stubs do not define fails the run.
+The smoke tests load the addon in TOC order against `tests/wow_stubs.lua` and walk through login, window show/hide, focus, X/Y actions, combat deferral and mode switches. Any read of a global the stubs do not define fails the run. They verify control flow, not client behaviour; changes should also be tested in game.
 
 ### Releasing
 
-Pushing an annotated tag such as `v1.0.0` runs the
-[BigWigs packager](https://github.com/BigWigsMods/packager), which substitutes
-`@project-version@` in the TOC, builds `Baganator_Controller.zip` and attaches
-it to a GitHub release. The packager recognises the `16xxx` interface number and
-tags the build for Forever. To also upload to CurseForge or Wago, add the
-`CF_API_KEY` / `WAGO_API_TOKEN` repository secrets and the
-`## X-Curse-Project-ID` / `## X-Wago-ID` lines to the TOC.
+Push an annotated tag (`v1.2.3`). The release workflow runs the [BigWigs packager](https://github.com/BigWigsMods/packager), substitutes `@project-version@` in the TOC, and attaches the zip to a GitHub release. Uploads to CurseForge and Wago are enabled by adding the `CF_API_KEY` and `WAGO_API_TOKEN` repository secrets and the `## X-Curse-Project-ID` / `## X-Wago-ID` TOC fields.
+
+## Contributing
+
+Issues and pull requests are welcome. Please include the `/bgrc` output and your Forever build number in bug reports, and run `luacheck .` and `python3 tests/run.py` before opening a pull request.
 
 ## License
 
-MIT. This addon contains no Baganator code; Baganator is copyright plusmouse,
-all rights reserved, and must be installed separately.
+[MIT](LICENSE). Baganator is a separate project by plusmouse and is not included in this repository.
